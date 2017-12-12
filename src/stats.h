@@ -20,11 +20,11 @@ struct memory_stats {
 };
 
 struct basic_stats {
-    long long connected_clients;
-    long long completed_commands;
-    long long slot_update_jobs;
-    long long recv_bytes;       // corvus从客户端接收请求的字节数
-    long long send_bytes;
+    long long connected_clients;    // 客户端与corvus建立连接的数量
+    long long completed_commands;   // 成功发送请求并获得相应的请求数量
+    long long slot_update_jobs;     // 触发slot信息更新的次数
+    long long recv_bytes;           // 收到的字节大小(包括从客户端->corvus的数据, 和redis实例->corvus的数据)
+    long long send_bytes;           // 发送的字节大小(包括从corvus->客户端的数据, 和corvus->redis实例的数据)
 
     long long remote_latency;
     long long total_latency;

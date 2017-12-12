@@ -200,6 +200,7 @@ void client_make_iov(struct conn_info *info)
 
         if (!info->quit) {
             cmd_make_iovec(cmd, &info->iov);
+            // 打点数据相关
             cmd_stats(cmd, get_time());
         } else {
             mbuf_range_clear(cmd->ctx, cmd->rep_buf);
@@ -214,6 +215,8 @@ void client_make_iov(struct conn_info *info)
     LOG(DEBUG, "client make iov %d", info->iov.len);
 }
 
+// 在corvus server获取到redis实例的返回值后,
+// 把结果传给corvus client, client把结果发送回客户端
 int client_write(struct connection *client)
 {
     struct context *ctx = client->ctx;

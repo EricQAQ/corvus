@@ -1328,6 +1328,9 @@ void cmd_mark_fail(struct command *cmd, const char *reason)
     cmd_mark(cmd, 1);
 }
 
+// 构造计时打点数据
+// 打点数据的起始点在corvus client接受客户端的请求
+// 打点数据的终止点在corvus client把结果回传给客户端
 void cmd_stats(struct command *cmd, int64_t end_time)
 {
     struct context *ctx = cmd->ctx;
