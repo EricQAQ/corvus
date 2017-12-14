@@ -38,8 +38,8 @@ struct conn_info {
 
     int refcount;
 
-    struct address addr;
-    char dsn[ADDRESS_LEN + 1];
+    struct address addr;                // redis实例地址对象
+    char dsn[ADDRESS_LEN + 1];          // redis实例ip和port字符串
 
     struct reader reader;
 

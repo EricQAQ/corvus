@@ -11,7 +11,12 @@ static inline size_t min(size_t a, size_t b) { return a < b ? a : b; }
 
 extern const size_t CMD_NUM;
 
+// slow_counts的key是redis实例的地址(ip+port),
+// value是一个列表, 列表中的每一个值都表示特定redis命令的慢查询个数
+// 它用来统计每个redis实例的每种redis请求产生的慢查询个数
 struct dict slow_counts;  // node dsn => slow cmd counts
+// counts_sum是一个列表, 它的每一个值都表示特定redis命令的慢查询个数
+// 它用来统计每种redis请求产生的慢查询个数
 uint32_t *counts_sum;
 
 const int multi_key_cmd[] = {CMD_MGET, CMD_MSET, CMD_DEL, CMD_EXISTS};
@@ -259,9 +264,11 @@ void slowlog_add_count(struct command *cmd)
 void slowlog_prepare_stats(struct context *contexts)
 {
     struct dict_iter iter = DICT_ITER_INITIALIZER;
+    // 初始化slow_counts字典, 把CMD_NUM项的值全部初始化为0
     DICT_FOREACH(&slow_counts, &iter) {
         memset(iter.value, 0, CMD_NUM * sizeof(uint32_t));
     }
+    // 初始化counts_sum列表
     memset(counts_sum, 0, CMD_NUM * sizeof(uint32_t));
 
     struct connection *server;
@@ -270,19 +277,22 @@ void slowlog_prepare_stats(struct context *contexts)
         TAILQ_FOREACH(server, &contexts[i].servers, next) {
             // Note that server will not be freed until corvus stop,
             // so we don't need to copy dsn.
-            const char *dsn = server->info->dsn;
+            const char *dsn = server->info->dsn;    // 获取redis地址
             uint32_t *node_counts = NULL;
             for (size_t j = 0; j != CMD_NUM; j++) {
+                // 获取对应cmd产生慢查询的数量, 同时重置server info对应计数器
                 uint32_t count = ATOMIC_IGET(server->info->slow_cmd_counts[j], 0);
                 if (count == 0) continue;
 
                 if (!node_counts) {
+                    // 从slow_counts表获取对应redis机器的计数器
                     node_counts = (uint32_t*)dict_get(&slow_counts, dsn);
                     if (!node_counts) {
                         node_counts = cv_calloc(CMD_NUM, sizeof(uint32_t));
                         dict_set(&slow_counts, dsn, node_counts);
                     }
                 }
+                // 计数器聚合
                 node_counts[j] += count;
                 counts_sum[j] += count;
             }

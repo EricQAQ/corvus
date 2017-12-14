@@ -332,6 +332,7 @@ int socket_write(int fd, struct iovec *iov, int invcnt)
     return CORVUS_ERR;
 }
 
+// 根据ip和port, 获取真实的socket地址, 并存入dest中
 int socket_get_sockaddr(char *addr, int port, struct sockaddr_in *dest, int socktype)
 {
     struct addrinfo *addrs;
@@ -368,6 +369,7 @@ int socket_parse_port(char *ptr, uint16_t *res)
     return CORVUS_OK;
 }
 
+// 把形如localhost:8888的地址中的port解析出来返回, 并记录:前地址的长度
 int socket_parse(char *addr, ssize_t *len)
 {
     uint16_t port;
@@ -383,20 +385,24 @@ int socket_parse(char *addr, ssize_t *len)
     return port;
 }
 
+// 通过解析给予的地址, 把地址转换成ip+port的形式, 并存入address中
 int socket_parse_ip(char *addr, struct address *address)
 {
     ssize_t len;
-    int port = socket_parse(addr, &len);
+    int port = socket_parse(addr, &len);    // 获取端口号
     if (port == CORVUS_ERR) return CORVUS_ERR;
 
+    // 把主机名记录下来
     char a[len + 1];
     memcpy(a, addr, len);
     a[len] = '\0';
 
     struct sockaddr_in addr_in;
+    // 获取真实的地址, 并写入addr_in
     if (socket_get_sockaddr(a, port, &addr_in, SOCK_STREAM) == CORVUS_ERR) {
         return CORVUS_ERR;
     }
+    // 把二进制地址转换成文本, 并写入address中
     if (inet_ntop(AF_INET, (void*)&(addr_in.sin_addr),
                 address->ip, sizeof(address->ip)) == NULL)
     {

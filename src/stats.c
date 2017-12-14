@@ -12,16 +12,17 @@
 
 #define HOST_LEN 255
 
+// redis节点metrics相关信息
 struct bytes {
-    char key[ADDRESS_LEN + 1];
-    long long recv;
-    long long send;
-    long long completed;
+    char key[ADDRESS_LEN + 1];      // 地址
+    long long recv;                 // 收到字节数
+    long long send;                 // 发送字节数
+    long long completed;            // 请求完成数量
 };
 
-static int statsd_fd = -1;
-static struct sockaddr_in dest;
-static struct dict bytes_map;
+static int statsd_fd = -1;          // corvus用于发送statsd metrics的udp端口
+static struct sockaddr_in dest;     // statsd用于接收corvus发送的打点信息的udp端口
+static struct dict bytes_map;       // key是redis地址, value是上面的bytes对象
 static char hostname[HOST_LEN + 1];
 
 // context for stats thread, no need to init,
@@ -70,17 +71,24 @@ static inline void stats_cumulate(struct stats *stats)
     ATOMIC_INC(cumulation.basic.moved_recv, stats->basic.moved_recv);
 }
 
+// 发送打点数据到stats地址上
 static void stats_send(char *metric, double value)
 {
     if (statsd_fd == -1) {
+        // corvus端没有udp端口, 创建一个
         statsd_fd = socket_create_udp_client();
     }
 
     int n;
     const char *fmt = "corvus.%s.%s-%d.%s:%f|g";
+    // 获取metrics数据的长度.
+    // 函数snprintf用于将格式化的数据写入字符串, 参数分别为:
+    // (char *: 需要写入到的字符串, int: 要写入的字符的最大数量, char *: 写入格式, ...: 写入内容)
     n = snprintf(NULL, 0, fmt, config.cluster, hostname, config.bind, metric, value);
     char buf[n + 1];
+    // 格式化metrics数据, 保存到buf中
     snprintf(buf, sizeof(buf), fmt, config.cluster, hostname, config.bind, metric, value);
+    // 从statsd_fd套接字发送buf到dest中(发送打点数据)
     if (sendto(statsd_fd, buf, n, 0, (struct sockaddr*)&dest, sizeof(dest)) == -1) {
         LOG(WARN, "fail to send metrics data: %s", strerror(errno));
     }
@@ -157,6 +165,7 @@ void stats_get_simple(struct stats *stats, bool reset)
     }
 }
 
+// 对redis节点的打点数据进行聚合计算
 void stats_node_info_agg(struct bytes *bytes)
 {
     struct bytes *b = NULL;
@@ -165,29 +174,32 @@ void stats_node_info_agg(struct bytes *bytes)
     int j, n, m = 0;
 
     for (int i = 0; i < config.thread; i++) {
-        TAILQ_FOREACH(server, &contexts[i].servers, next) {
+        TAILQ_FOREACH(server, &contexts[i].servers, next) {     // 尾部遍历所有context的server对象
             n = strlen(server->info->addr.ip);
-            if (n <= 0) continue;
+            if (n <= 0) continue;   // 该server的连接无效, pass
 
             char ip[n + 8];
+            // 拷贝server的ip地址, 并用-替换掉.
             for (j = 0; j < n; j++) {
                 ip[j] = server->info->addr.ip[j];
                 if (ip[j] == '.') ip[j] = '-';
             }
+            // 加入端口信息, 写入ip字符串中
             sprintf(ip + j, "-%d", server->info->addr.port);
 
             b = dict_get(&bytes_map, ip);
             if (b == NULL) {
                 b = &bytes[m++];
+                // 初始化bytes对象
                 strncpy(b->key, ip, sizeof(b->key));
                 b->send = 0;
                 b->recv = 0;
                 b->completed = 0;
                 dict_set(&bytes_map, b->key, (void*)b);
             }
-            b->send += ATOMIC_IGET(server->info->send_bytes, 0);
-            b->recv += ATOMIC_IGET(server->info->recv_bytes, 0);
-            b->completed += ATOMIC_IGET(server->info->completed_commands, 0);
+            b->send += ATOMIC_IGET(server->info->send_bytes, 0);    // 提取server发送字节数, 并重置server info中的计数器
+            b->recv += ATOMIC_IGET(server->info->recv_bytes, 0);    // 提取server接收字节数, 并重置server info中的计数器
+            b->completed += ATOMIC_IGET(server->info->completed_commands, 0);   // 提取server成功处理的请求数量, 并重置server info中的计数器
         }
     }
 }
@@ -206,6 +218,7 @@ void stats_send_simple()
     stats_send("latency", stats.basic.total_latency / 1000000.0);
 }
 
+// 发送redis节点的打点信息
 void stats_send_node_info()
 {
     struct bytes *value;
@@ -220,12 +233,13 @@ void stats_send_node_info()
     struct dict_iter iter = DICT_ITER_INITIALIZER;
     DICT_FOREACH(&bytes_map, &iter) {
         value = (struct bytes*)iter.value;
-        snprintf(name, len, "redis-node.%s.bytes.send", iter.key);
-        stats_send(name, value->send);
+        snprintf(name, len, "redis-node.%s.bytes.send", iter.key);  // 格式化输出metrcis到name
+        stats_send(name, value->send);                              // 发送metrics
         snprintf(name, len, "redis-node.%s.bytes.recv", iter.key);
         stats_send(name, value->recv);
         snprintf(name, len, "redis-node.%s.commands.completed", iter.key);
         stats_send(name, value->completed);
+        // 发送完毕后, 重置数据
         value->send = 0;
         value->recv = 0;
         value->completed = 0;
@@ -249,9 +263,10 @@ void stats_get(struct stats *stats)
     }
 }
 
+// 发送慢查询打点
 static void stats_send_slow_log()
 {
-    if (!slowlog_statsd_enabled())
+    if (!slowlog_statsd_enabled())      // 判断是否开启慢查询打点
         return;
 
     const char *fmt = "redis-node.%s.slow_query.%s";
@@ -259,6 +274,7 @@ static void stats_send_slow_log()
     extern struct cmd_item cmds[];
     extern const size_t CMD_NUM;
 
+    // 准备慢查询的相关数据
     slowlog_prepare_stats(get_contexts());
 
     // from slowlog.c
@@ -266,10 +282,11 @@ static void stats_send_slow_log()
     extern uint32_t *counts_sum;
 
     struct dict_iter iter = DICT_ITER_INITIALIZER;
-    DICT_FOREACH(&slow_counts, &iter) {
+    DICT_FOREACH(&slow_counts, &iter) {     // 遍历slow_counts字典, 发送慢查询打点
         const char *dsn = iter.key;
         uint32_t *counts = (uint32_t*)iter.value;
 
+        // 获取redis ip+port
         char addr[ADDRESS_LEN] = {0};
         strncpy(addr, dsn, ADDRESS_LEN);
         for (size_t i = 0; i < ADDRESS_LEN; i++) {
@@ -283,11 +300,12 @@ static void stats_send_slow_log()
             const char *cmd = cmds[i].cmd;
             int n = snprintf(NULL, 0, fmt, addr, cmd);
             char buf[n + 1];
-            snprintf(buf, sizeof(buf), fmt, addr, cmd);
-            stats_send(buf, counts[i]);
+            snprintf(buf, sizeof(buf), fmt, addr, cmd);     // 构造打点指标
+            stats_send(buf, counts[i]);     // 发送数据
         }
     }
 
+    // 遍历counts_sum列表, 发送统计数据
     for (size_t i = 0; i < CMD_NUM; i++) {
         uint32_t sum = counts_sum[i];
         if (sum) {
@@ -358,14 +376,16 @@ void stats_kill()
     LOG(DEBUG, "killing stats thread");
 }
 
+// 通过配置文件中读取的stats地址, 获取到真正的socket地址, 并存入全局变量dest中
 int stats_resolve_addr(char *addr)
 {
     struct address a;
 
     memset(&dest, 0, sizeof(struct sockaddr_in));
-    if (socket_parse_ip(addr, &a) == CORVUS_ERR) {
+    if (socket_parse_ip(addr, &a) == CORVUS_ERR) {  // 解析地址, 并以ip+port的形式存入a中
         LOG(ERROR, "stats_resolve_addr: fail to parse addr %s", addr);
         return CORVUS_ERR;
     }
+    // 获取真实的socket地址, 存入dest中
     return socket_get_sockaddr(a.ip, a.port, &dest, SOCK_DGRAM);
 }

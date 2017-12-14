@@ -547,6 +547,7 @@ int main(int argc, const char *argv[])
     }
 
     if (strlen(config.statsd_addr) > 0) {
+        // 通过配置文件提供的statsd地址, 获取真实socket地址, 并读取到全局变量dest中
         if (stats_resolve_addr(config.statsd_addr) == CORVUS_ERR) {
             LOG(WARN, "fail to resolve statsd address");
         } else {
