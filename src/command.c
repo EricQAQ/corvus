@@ -952,7 +952,7 @@ int cmd_parse_token(struct command *cmd, struct redis_data *data)
     ASSERT_TYPE(f1, REP_STRING);
 
     cmd->request_type = cmd_get_type(cmd, &f1->pos);
-    if (cmd->request_type <= 0) {
+    if (cmd->request_type <= 0) {       // 不合法的类型
         char name[f1->pos.str_len + 1];
         pos_to_str(&f1->pos, name);
         LOG(ERROR, "%s: fail to parse command %s", __func__, name);
@@ -1157,7 +1157,7 @@ void cmd_mark(struct command *cmd, int fail)
     }
 }
 
-// 初始化一个dict, key是redis的命令名称, value是cmd_item
+// 初始化command_map字典, key是redis的命令名称, value是cmd_item
 void cmd_map_init()
 {
     dict_init(&command_map);

@@ -38,8 +38,14 @@ struct conn_info {
 
     int refcount;
 
-    struct address addr;                // redis实例地址对象
-    char dsn[ADDRESS_LEN + 1];          // redis实例ip和port字符串
+    // 地址对象,
+    // 1. 如果用在client和corvus client的连接上, 则表示client的地址对象
+    // 2. 如果用在corvus和redis实例的连接上, 则表示redis实例的地址对象
+    struct address addr;
+    // ip和port字符串
+    // 1. 如果用在client和corvus client的连接上, 则表示client的地址字符串
+    // 2. 如果用在corvus和redis实例的连接上, 则表示redis实例的地址字符串
+    char dsn[ADDRESS_LEN + 1];
 
     struct reader reader;
 

@@ -10,6 +10,7 @@
 #define CORVUS_IOV_MAX IOV_MAX
 #endif
 
+// HANDLER三个参数分别表示: (cmd, type, access)
 #define CMD_DO(HANDLER)                           \
     /* keys command */                            \
     HANDLER(DEL,               COMPLEX,  WRITE)   \
@@ -188,7 +189,7 @@ struct iov_data {
 };
 
 struct command {
-    struct buf_ptr req_buf[2];  // redis请求体
+    struct buf_ptr req_buf[2];  // corvus发送到redis实例的数据
     struct buf_ptr rep_buf[2];  // redis实例返回的数据
 
     STAILQ_ENTRY(command) cmd_next;
@@ -196,7 +197,7 @@ struct command {
     STAILQ_ENTRY(command) waiting_next;
     STAILQ_ENTRY(command) sub_cmd_next;
 
-    struct context *ctx;
+    struct context *ctx;            // 当前command对象所属的context对象
     struct connection *conn_ref;
     struct command *cmd_ref;
 
@@ -215,11 +216,11 @@ struct command {
     int refcount;
 
     int32_t slot;           // key对应的slot
-    int32_t cmd_type;       // redis命令的类型(见13行)
+    int32_t cmd_type;       // CMD_DEL ...(CMD_命令名)
     int32_t cmd_access;     // redis命令的access种类(见13行)
-    int16_t request_type;
+    int16_t request_type;   // redis命令的类型, CMD_BASIC..(见13行)
     int16_t reply_type;
-    int keys;
+    int keys;               // key的数量
     int integer_data; /* for integer response */
 
     int cmd_count;
